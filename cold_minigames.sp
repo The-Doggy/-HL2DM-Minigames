@@ -4,6 +4,7 @@
 #include <sdkhooks>
 #include <morecolors>
 #include <smlib>
+#include <cold_minigames>
 
 #pragma newdecls required
 #pragma semicolon 1
@@ -77,7 +78,10 @@ PlayerTagData g_TagPlayers[MAXPLAYERS + 1];
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
+	CreateNative("IsClientInMinigame", Native_InMinigame);
 	g_bLate = late;
+
+	return APLRes_Success;
 }
 
 public void OnPluginStart()
@@ -671,4 +675,16 @@ stock bool IsValidClient(int client)
 	IsClientConnected(client) && 
 	IsClientAuthorized(client) && 
 	IsClientInGame(client);
+}
+
+public any Native_InMinigame(Handle plugin, int numParams)
+{
+	int Client = GetNativeCell(1);
+	if(!IsValidClient(Client))
+	{
+		ThrowNativeError(SP_ERROR_NATIVE, "Invalid client index %i", Client);
+		return false;
+	}
+
+	return g_TagPlayers[Client].IsPlaying();
 }
