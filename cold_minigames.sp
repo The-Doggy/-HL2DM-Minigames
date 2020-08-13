@@ -21,8 +21,6 @@ public Plugin myinfo =
 	url = "coldcommunity.com"
 };
 
-int g_iLaser;
-int g_iHalo;
 bool g_bLate;
 Handle g_HUD;
 Handle g_HUDDistance;
@@ -33,7 +31,7 @@ enum struct TagData
 	bool Started; // Game has been started
 	float TimeRemaining; // Amount of time left until runners win
 	ArrayList TotalPlayers; // Total amount of players currently playing
-	Handle BeaconTimer; // Timer for beacon runners
+	Handle BeepTimer; // Timer for beep runners
 	Handle EndTimer; // Timer for game end
 
 	void Reset()
@@ -42,7 +40,7 @@ enum struct TagData
 		this.Started = false;
 		this.TimeRemaining = 0.0;
 		this.TotalPlayers.Clear();
-		delete this.BeaconTimer;
+		delete this.BeepTimer;
 		delete this.EndTimer;
 	}
 }
@@ -52,7 +50,7 @@ enum struct PlayerTagData
 	bool Leader; // Player who created game
 	bool Tagger; // Player who is currently "IT"
 	bool Runner; // Player who is not currently "IT"
-	bool Beacon; // Beacon player
+	bool Beep; // Beep player
 	int Tags; // The amount of players a player has tagged
 	float RunnerTime; // The amount of time a player is a runner for
 
@@ -61,7 +59,7 @@ enum struct PlayerTagData
 		this.Leader = false;
 		this.Tagger = false;
 		this.Runner = false;
-		this.Beacon = false;
+		this.Beep = false;
 		this.Tags = 0;
 		this.RunnerTime = 0.0;
 	}
@@ -117,8 +115,6 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
-	g_iLaser = PrecacheModel("sprites/laser.vmt");
-	g_iHalo = PrecacheModel("sprites/halo01.vmt");
 	PrecacheSound("buttons/blip1.wav", true);
 }
 
@@ -126,6 +122,7 @@ public void OnClientPutInServer(int Client)
 {
 	SDKHook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
 	//	SDKHook(Client, SDKHook_WeaponCanSwitchTo, OnWeaponSwitch);
+	g_TagPlayers[Client].Reset();
 }
 
 public void OnClientDisconnect(int Client)
@@ -256,22 +253,14 @@ public Action GlobalSecondTimer(Handle timer)
 				distance.Clear();
 			}
 			
-			// Runner beacon and colour
+			// Runner beep and colour
 			if(g_TagPlayers[i].Runner)
 			{
 				SetEntityRenderColor(i, 255, 0, 183, 255);
 				
-				if(g_TagPlayers[i].Beacon)
+				if(g_TagPlayers[i].Beep)
 				{
 					float vec[3];
-					GetClientAbsOrigin(i, vec);
-					vec[2] += 10;
-
-					TE_SetupBeamRingPoint(vec, 10.0, 375.0, g_iLaser, g_iHalo, 0, 15, 0.5, 5.0, 0.0, {255, 0, 183, 255}, 10, 0);
-					TE_SendToAll();
-
-					TE_SetupBeamRingPoint(vec, 10.0, 375.0, g_iLaser, g_iHalo, 0, 10, 0.6, 10.0, 0.5, {255, 0, 183, 255}, 10, 0);
-					TE_SendToAll();
 
 					GetClientEyePosition(i, vec);
 					EmitAmbientSound("buttons/blip1.wav", vec, i, SNDLEVEL_NORMAL);
@@ -459,7 +448,7 @@ void StartGame()
 
 	g_Tag.TimeRemaining = 600.0;
 	g_Tag.EndTimer = CreateTimer(g_Tag.TimeRemaining, Timer_EndGame);
-	g_Tag.BeaconTimer = CreateTimer(g_Tag.TimeRemaining / 2, Timer_BeaconRunners);
+	g_Tag.BeepTimer = CreateTimer(g_Tag.TimeRemaining / 2, Timer_BeepRunners);
 }
 
 public Action Timer_ReleaseTagger(Handle timer, int userid)
@@ -483,13 +472,7 @@ public Action Timer_ReleaseTagger(Handle timer, int userid)
 
 public Action Timer_EndGame(Handle timer)
 {
-	int runnerNum;
-	for(int i = 1; i <= MaxClients; i++)
-	{
-		if(!IsClientInGame(i) || !g_TagPlayers[i].Runner) continue;
-		runnerNum++;
-	}
-
+	int runnerNum = GetRunnerCount();
 	if(runnerNum >= 1)
 	{
 		CPrintToTagAll("%s Time has run out! Runners win!", CMDTAG);
@@ -506,14 +489,14 @@ public Action Timer_EndGame(Handle timer)
 	return Plugin_Stop;
 }
 
-public Action Timer_BeaconRunners(Handle timer)
+public Action Timer_BeepRunners(Handle timer)
 {
 	for(int i = 1; i <= MaxClients; i++)
 	{
 		if(!IsClientInGame(i) || !g_TagPlayers[i].Runner) continue;
-		g_TagPlayers[i].Beacon = true;
+		g_TagPlayers[i].Beep = true;
 	}
-	CPrintToTagAll("%s Runners are now beaconed!", CMDTAG);
+	CPrintToTagAll("%s Runners are now beeping!", CMDTAG);
 	return Plugin_Stop;
 }
 
@@ -573,7 +556,7 @@ stock void SetTagger(int Client)
 {
 	g_TagPlayers[Client].Tagger = true;
 	g_TagPlayers[Client].Runner = false;
-	g_TagPlayers[Client].Beacon = false;
+	g_TagPlayers[Client].Beep = false;
 	SetEntityRenderColor(Client, 0, 51, 255);
 	if(IsPlayerAlive(Client))
 		Client_GiveWeapon(Client, "weapon_stunstick");
