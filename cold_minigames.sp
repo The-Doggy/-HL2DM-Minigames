@@ -17,7 +17,7 @@ public Plugin myinfo =
 	name = "CoLD Minigames",
 	author = "The Doggy",
 	description = "Hopefully a bunch of fun minigames to mess around with eventually",
-	version = "0.1.1",
+	version = "0.1.3",
 	url = "coldcommunity.com"
 };
 
@@ -92,6 +92,10 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_join", Command_JoinTag, "Joins a game of tag");
 	RegConsoleCmd("sm_start", Command_StartTag, "Starts a game of tag");
 
+	// Command Listeners
+	AddCommandListener(Listener_Kill, "kill");
+	AddCommandListener(Listener_Items, "sm_items");
+
 	// Late Load
 	if(g_bLate)
 	{
@@ -159,6 +163,32 @@ public void OnClientDisconnect(int Client)
 		SetTagger(tagger);
 		CPrintToTagAll("%s %N is the new tagger!", CMDTAG, tagger);
 	}
+}
+
+public Action Listener_Kill(int Client, const char[] command, int argc)
+{
+	if(!IsValidClient(Client)) return Plugin_Continue;
+
+	if(g_Tag.Started && g_TagPlayers[Client].IsPlaying())
+	{
+		CPrintToChat(Client, "%s No Cheating!", CMDTAG);
+		return Plugin_Stop;
+	}
+
+	return Plugin_Continue;
+}
+
+public Action Listener_Items(int Client, const char[] command, int argc)
+{
+	if(!IsValidClient(Client)) return Plugin_Continue;
+
+	if(g_Tag.Started && g_TagPlayers[Client].IsPlaying())
+	{
+		CPrintToChat(Client, "%s No Cheating!", CMDTAG);
+		return Plugin_Stop;
+	}
+
+	return Plugin_Continue;
 }
 
 public Action Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
@@ -390,6 +420,9 @@ public Action Timer_StartTag(Handle timer, int userid)
 		return Plugin_Stop;
 	}
 
+	if(Client != GetTagLeader())
+		return Plugin_Stop;
+
 	if(!g_Tag.Created)
 	{
 		CPrintToTagAll("%s Tag game is no longer valid, cancelling game...", CMDTAG);
@@ -521,8 +554,7 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 	if(!g_TagPlayers[attacker].IsPlaying() && !g_TagPlayers[victim].IsPlaying()) return Plugin_Continue;
 
 	char class[64];
-	if(IsValidEntity(weapon))
-		GetEntityClassname(weapon, class, sizeof(class));
+	Client_GetActiveWeaponName(attacker, class, sizeof(class));
 
 	if(g_TagPlayers[victim].Runner && g_TagPlayers[attacker].Tagger && StrEqual(class, "weapon_stunstick") && g_Tag.TimeRemaining < 590.0)
 	{
