@@ -95,7 +95,7 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_start", Command_StartTag, "Starts a game of tag");
 
 	// Command Listeners
-	AddCommandListener(Listener_BlockCommands, "kill");
+	AddCommandListener(Listener_BlockKill, "kill");
 	AddCommandListener(Listener_BlockCommands, "sm_items");
 	AddCommandListener(Listener_BlockCommands, "sm_gang");
 	AddCommandListener(Listener_BlockCommands, "sm_switch");
@@ -158,8 +158,9 @@ public void OnClientDisconnect(int Client)
 		{
 			g_Tag.TotalPlayers.Erase(index);
 
-			if(g_Tag.TotalPlayers.Length == 0)
+			if(g_Tag.TotalPlayers.Length <= 1)
 			{
+				CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
 				g_Tag.Reset();
 				ResetTagPlayers();
 			}
@@ -229,6 +230,13 @@ public Action Listener_BlockKill(int Client, const char[] command, int argc)
 			{
 				CPrintToChat(Client, "%s You have been banned from playing tag for cheating.", CMDTAG);
 				g_TagPlayers[Client].Reset();
+
+				if(g_Tag.TotalPlayers.Length <= 1)
+				{
+					CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
+					g_Tag.Reset();
+					ResetTagPlayers();
+				}
 			}
 
 			delete kv;
