@@ -24,6 +24,8 @@ public Plugin myinfo =
 bool g_bLate;
 Handle g_HUD;
 Handle g_HUDDistance;
+int g_iCheatTimes[MAXPLAYERS + 1];
+char g_sBuildPath[PLATFORM_MAX_PATH];
 
 enum struct TagData
 {
@@ -117,6 +119,9 @@ public void OnPluginStart()
 	// HUD Sync
 	g_HUD = CreateHudSynchronizer();
 	g_HUDDistance = CreateHudSynchronizer();
+
+	// Build path 
+	BuildPath(Path_SM, g_sBuildPath, sizeof(g_sBuildPath), "configs/minigame_bans.txt");
 }
 
 public void OnMapStart()
@@ -129,10 +134,13 @@ public void OnClientPutInServer(int Client)
 	SDKHook(Client, SDKHook_OnTakeDamage, OnTakeDamage);
 	//	SDKHook(Client, SDKHook_WeaponCanSwitchTo, OnWeaponSwitch);
 	g_TagPlayers[Client].Reset();
+	g_iCheatTimes[Client] = 0;
 }
 
 public void OnClientDisconnect(int Client)
 {
+	g_iCheatTimes[Client] = 0;
+
 	if(g_TagPlayers[Client].Leader && g_Tag.Created && !g_Tag.Started)
 	{
 		CPrintToTagAll("%s %N has left the game, Tag cancelled...", CMDTAG, Client);
@@ -143,15 +151,18 @@ public void OnClientDisconnect(int Client)
 
 	g_TagPlayers[Client].Reset();
 
-	int index = g_Tag.TotalPlayers.FindValue(Client);
-	if(index != -1)
+	if(g_Tag.TotalPlayers != null)
 	{
-		g_Tag.TotalPlayers.Erase(index);
-
-		if(g_Tag.TotalPlayers.Length == 0)
+		int index = g_Tag.TotalPlayers.FindValue(Client);
+		if(index != -1)
 		{
-			g_Tag.Reset();
-			ResetTagPlayers();
+			g_Tag.TotalPlayers.Erase(index);
+
+			if(g_Tag.TotalPlayers.Length == 0)
+			{
+				g_Tag.Reset();
+				ResetTagPlayers();
+			}
 		}
 	}
 
@@ -165,6 +176,68 @@ public void OnClientDisconnect(int Client)
 		SetTagger(tagger);
 		CPrintToTagAll("%s %N is the new tagger!", CMDTAG, tagger);
 	}
+}
+
+public Action OnPlayerRunCmd(int Client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
+{
+	if(buttons & IN_SPEED)
+	{
+		int entity = GetClientAimTarget(Client, false);
+		if(entity != -1)
+		{
+			char class[64];
+			GetEntityClassname(entity, class, sizeof(class));
+
+			if(StrEqual(class, "prop_door_rotating"))
+			{
+				buttons &= ~IN_SPEED;
+				return Plugin_Changed;
+			}
+		}
+	}
+	return Plugin_Continue;
+}
+
+public Action Listener_BlockKill(int Client, const char[] command, int argc)
+{
+	if(!IsValidClient(Client)) return Plugin_Continue;
+
+	if(g_Tag.Started && g_TagPlayers[Client].IsPlaying())
+	{
+		CPrintToChat(Client, "%s No Cheating!", CMDTAG);
+		g_iCheatTimes[Client]++;
+
+		if(g_iCheatTimes[Client] >= 5)
+		{
+			KeyValues kv = new KeyValues("BannedPlayers");
+			kv.ImportFromFile(g_sBuildPath);
+
+			char sSteam[64];
+			if(!GetClientAuthId(Client, AuthId_SteamID64, sSteam, sizeof(sSteam)))
+			{
+				LogError("Failed to get client %N's steamid", Client);
+				delete kv;
+				return Plugin_Stop;
+			}
+
+			kv.JumpToKey(sSteam, true);
+			kv.Rewind();
+
+			if(!kv.ExportToFile(g_sBuildPath))
+				LogError("Failed to export keyvalues to file %s", g_sBuildPath);
+			else
+			{
+				CPrintToChat(Client, "%s You have been banned from playing tag for cheating.", CMDTAG);
+				g_TagPlayers[Client].Reset();
+			}
+
+			delete kv;
+		}
+
+		return Plugin_Stop;
+	}
+
+	return Plugin_Continue;
 }
 
 public Action Listener_BlockCommands(int Client, const char[] command, int argc)
@@ -198,20 +271,8 @@ void DelaySpawn(int userid)
 			SetEntityRenderColor(Client, 255, 0, 183, 255);
 		}
 		else if(g_TagPlayers[Client].Tagger)
-		{
 			SetTagger(Client);
-			CreateTimer(1.0, Timer_SetTagger, GetClientUserId(Client));
-		}
 	}
-}
-
-public Action Timer_SetTagger(Handle timer, int userid)
-{
-	int Client = GetClientOfUserId(userid);
-	if(!IsValidClient(Client)) return Plugin_Stop;
-
-	SetTagger(Client);
-	return Plugin_Stop;
 }
 
 public Action GlobalSecondTimer(Handle timer)
@@ -342,6 +403,12 @@ public Action Command_JoinTag(int Client, int args)
 	if(g_Tag.TotalPlayers.FindValue(Client) != -1)
 	{
 		CReplyToCommand(Client, "%s You've already joined this game of Tag!", CMDTAG);
+		return Plugin_Handled;
+	}
+
+	if(IsClientBanned(Client))
+	{
+		CReplyToCommand(Client, "%s You are banned from playing tag!", CMDTAG);
 		return Plugin_Handled;
 	}
 
@@ -561,7 +628,7 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 			for(int i = 1; i <= MaxClients; i++)
 			{
 				if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
-				ForcePlayerSuicide(i);
+				ResetTagModifiers();
 			}
 
 			g_Tag.Reset();
@@ -573,6 +640,16 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 	return Plugin_Changed;
 }
 
+stock void ResetTagModifiers()
+{
+	for(int i = 1; i <= MaxClients; i++)
+	{
+		if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
+		SetEntityRenderColor(i, 255, 255, 255);
+		SetEntProp(i, Prop_Data, "m_CollisionGroup", 5);
+	}
+}
+
 stock void SetTagger(int Client)
 {
 	g_TagPlayers[Client].Tagger = true;
@@ -580,21 +657,16 @@ stock void SetTagger(int Client)
 	g_TagPlayers[Client].Beep = false;
 	SetEntityRenderColor(Client, 0, 51, 255);
 	if(IsPlayerAlive(Client))
-		Client_GiveWeapon(Client, "weapon_stunstick");
+		GivePlayerItem(Client, "weapon_stunstick");
 	CPrintToChat(Client, "%s You've become a tagger!", CMDTAG);
 }
 
-stock void ResetTagPlayers(int Client = -1)
+stock void ResetTagPlayers()
 {
-	if(Client == -1)
+	for(int i = 1; i <= MaxClients; i++)
 	{
-		for(int i = 1; i <= MaxClients; i++)
-		{
-			g_TagPlayers[i].Reset();
-		}
+		g_TagPlayers[i].Reset();
 	}
-	else
-		g_TagPlayers[Client].Reset();
 }
 
 stock int GetRandomTagPlayer()
@@ -642,6 +714,35 @@ stock int GetTagLeader()
 		return i;
 	}
 	return -1;
+}
+
+stock bool IsClientBanned(int Client)
+{
+	if(!IsValidClient(Client)) return false;
+
+	KeyValues kv = new KeyValues("BannedPlayers");
+	if(!kv.ImportFromFile(g_sBuildPath))
+	{
+		LogError("Failed to load banned players from %s", g_sBuildPath);
+		delete kv;
+		return false;
+	}
+
+	char sSteam[64];
+	if(!GetClientAuthId(Client, AuthId_SteamID64, sSteam, sizeof(sSteam)))
+	{
+		LogError("Failed to get client %N's steamid", Client);
+		delete kv;
+		return false;
+	}
+
+	if(!kv.JumpToKey(sSteam))
+	{
+		delete kv;
+		return false;
+	}
+	
+	return true;
 }
 
 stock void CPrintToTagLeader(const char[] format, any ...)
