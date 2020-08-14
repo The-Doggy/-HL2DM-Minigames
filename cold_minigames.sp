@@ -93,8 +93,10 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_start", Command_StartTag, "Starts a game of tag");
 
 	// Command Listeners
-	AddCommandListener(Listener_Kill, "kill");
-	AddCommandListener(Listener_Items, "sm_items");
+	AddCommandListener(Listener_BlockCommands, "kill");
+	AddCommandListener(Listener_BlockCommands, "sm_items");
+	AddCommandListener(Listener_BlockCommands, "sm_gang");
+	AddCommandListener(Listener_BlockCommands, "sm_switch");
 
 	// Late Load
 	if(g_bLate)
@@ -165,20 +167,7 @@ public void OnClientDisconnect(int Client)
 	}
 }
 
-public Action Listener_Kill(int Client, const char[] command, int argc)
-{
-	if(!IsValidClient(Client)) return Plugin_Continue;
-
-	if(g_Tag.Started && g_TagPlayers[Client].IsPlaying())
-	{
-		CPrintToChat(Client, "%s No Cheating!", CMDTAG);
-		return Plugin_Stop;
-	}
-
-	return Plugin_Continue;
-}
-
-public Action Listener_Items(int Client, const char[] command, int argc)
+public Action Listener_BlockCommands(int Client, const char[] command, int argc)
 {
 	if(!IsValidClient(Client)) return Plugin_Continue;
 
