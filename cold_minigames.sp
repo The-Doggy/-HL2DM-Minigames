@@ -36,14 +36,15 @@ enum struct TagData
 	Handle BeepTimer; // Timer for beep runners
 	Handle EndTimer; // Timer for game end
 
-	void Reset()
+	void Reset(bool deleteEnd = true)
 	{
 		this.Created = false;
 		this.Started = false;
 		this.TimeRemaining = 0.0;
 		this.TotalPlayers.Clear();
 		delete this.BeepTimer;
-		delete this.EndTimer;
+		if(deleteEnd)
+			delete this.EndTimer;
 	}
 }
 
@@ -89,10 +90,13 @@ public void OnPluginStart()
 	// Load translations
 	LoadTranslations("common.phrases");
 
-	// Regsiter commands
+	// Register commands
 	RegConsoleCmd("sm_tag", Command_Tag, "Creates a game of tag");
 	RegConsoleCmd("sm_join", Command_JoinTag, "Joins a game of tag");
 	RegConsoleCmd("sm_start", Command_StartTag, "Starts a game of tag");
+
+	RegAdminCmd("sm_tagunban", Command_UnbanFromTag, ADMFLAG_CUSTOM5, "Unbans a player from tag");
+	RegAdminCmd("sm_tagban", Command_BanFromTag, ADMFLAG_CUSTOM5, "Bans a player from tag");
 
 	// Command Listeners
 	AddCommandListener(Listener_BlockKill, "kill");
@@ -145,6 +149,7 @@ public void OnClientDisconnect(int Client)
 	{
 		CPrintToTagAll("%s %N has left the game, Tag cancelled...", CMDTAG, Client);
 		g_Tag.Reset();
+		ResetTagModifiers();
 		ResetTagPlayers();
 		return;
 	}
@@ -162,6 +167,7 @@ public void OnClientDisconnect(int Client)
 			{
 				CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
 				g_Tag.Reset();
+				ResetTagModifiers();
 				ResetTagPlayers();
 			}
 		}
@@ -177,26 +183,6 @@ public void OnClientDisconnect(int Client)
 		SetTagger(tagger);
 		CPrintToTagAll("%s %N is the new tagger!", CMDTAG, tagger);
 	}
-}
-
-public Action OnPlayerRunCmd(int Client, int& buttons, int& impulse, float vel[3], float angles[3], int& weapon, int& subtype, int& cmdnum, int& tickcount, int& seed, int mouse[2])
-{
-	if(buttons & IN_SPEED)
-	{
-		int entity = GetClientAimTarget(Client, false);
-		if(entity != -1)
-		{
-			char class[64];
-			GetEntityClassname(entity, class, sizeof(class));
-
-			if(StrEqual(class, "prop_door_rotating"))
-			{
-				buttons &= ~IN_SPEED;
-				return Plugin_Changed;
-			}
-		}
-	}
-	return Plugin_Continue;
 }
 
 public Action Listener_BlockKill(int Client, const char[] command, int argc)
@@ -222,6 +208,7 @@ public Action Listener_BlockKill(int Client, const char[] command, int argc)
 			}
 
 			kv.JumpToKey(sSteam, true);
+			kv.SetString(NULL_STRING, "yeet");
 			kv.Rewind();
 
 			if(!kv.ExportToFile(g_sBuildPath))
@@ -231,10 +218,15 @@ public Action Listener_BlockKill(int Client, const char[] command, int argc)
 				CPrintToChat(Client, "%s You have been banned from playing tag for cheating.", CMDTAG);
 				g_TagPlayers[Client].Reset();
 
+				int index = g_Tag.TotalPlayers.FindValue(Client);
+				if(index != -1)
+					g_Tag.TotalPlayers.Erase(index);
+
 				if(g_Tag.TotalPlayers.Length <= 1)
 				{
 					CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
 					g_Tag.Reset();
+					ResetTagModifiers();
 					ResetTagPlayers();
 				}
 			}
@@ -246,6 +238,134 @@ public Action Listener_BlockKill(int Client, const char[] command, int argc)
 	}
 
 	return Plugin_Continue;
+}
+
+public Action Command_UnbanFromTag(int Client, int args)
+{
+	if(args != 1)
+	{
+		CReplyToCommand(Client, "%s Invalid Syntax. Usage: sm_tagunban <player>", CMDTAG);
+		return Plugin_Handled;
+	}
+
+	char arg[MAX_NAME_LENGTH];
+	GetCmdArg(1, arg, sizeof(arg));
+
+	int target = FindTarget(Client, arg);
+	if(target == -1) return Plugin_Handled;
+
+	KeyValues kv = new KeyValues("BannedPlayers");
+	if(!kv.ImportFromFile(g_sBuildPath))
+	{
+		CReplyToCommand(Client, "%s No banned players exist.", CMDTAG);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	char sSteam[64];
+	if(!GetClientAuthId(target, AuthId_SteamID64, sSteam, sizeof(sSteam)))
+	{
+		LogError("Failed to get client %N's steamid", target);
+		CReplyToCommand(Client, "%s An error occurred, please try again later.", CMDTAG);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	if(!kv.JumpToKey(sSteam))
+	{
+		CReplyToCommand(Client, "%s %N is not banned.", CMDTAG, target);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	if(!kv.DeleteThis())
+	{
+		CReplyToCommand(Client, "%s Failed to unban player %N", CMDTAG, target);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	kv.Rewind();
+
+	if(!kv.ExportToFile(g_sBuildPath))
+	{
+		LogError("Failed to export keyvalues to file %s", g_sBuildPath);
+		CReplyToCommand(Client, "%s Failed to unban player %N", target);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	CReplyToCommand(Client, "%s %N has been unbanned from playing tag.", CMDTAG, target);
+	CPrintToChat(target, "%s You have been unbanned from playing tag.", CMDTAG);
+	delete kv;
+	return Plugin_Handled;
+}
+
+public Action Command_BanFromTag(int Client, int args)
+{
+	if(args != 1)
+	{
+		CReplyToCommand(Client, "%s Invalid Syntax. Usage: sm_tagban <player>");
+		return Plugin_Handled;
+	}
+
+	char arg[MAX_NAME_LENGTH];
+	GetCmdArg(1, arg, sizeof(arg));
+
+	int target = FindTarget(Client, arg);
+	if(target == -1) return Plugin_Handled;
+
+	KeyValues kv = new KeyValues("BannedPlayers");
+	kv.ImportFromFile(g_sBuildPath);
+
+	char sSteam[64];
+	if(!GetClientAuthId(target, AuthId_SteamID64, sSteam, sizeof(sSteam)))
+	{
+		LogError("Failed to get client %N's steamid", target);
+		CReplyToCommand(Client, "%s An error occurred, please try again later.", CMDTAG);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	if(!kv.JumpToKey(sSteam, true))
+	{
+		CReplyToCommand(Client, "%s Failed to ban player %N", CMDTAG, target);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	kv.SetString(NULL_STRING, "yeet");
+
+	kv.Rewind();
+
+	if(!kv.ExportToFile(g_sBuildPath))
+	{
+		LogError("Failed to export keyvalues to file %s", g_sBuildPath);
+		CReplyToCommand(Client, "%s Failed to ban player %N", CMDTAG, target);
+		delete kv;
+		return Plugin_Handled;
+	}
+
+	CReplyToCommand(Client, "%s %N has been banned from playing tag.", CMDTAG, target);
+	CPrintToChat(target, "%s You have been banned from playing tag.", CMDTAG);
+
+	g_TagPlayers[target].Reset();
+
+	int index = g_Tag.TotalPlayers.FindValue(target);
+	if(index != -1)
+		g_Tag.TotalPlayers.Erase(index);
+
+	if(g_Tag.TotalPlayers.Length <= 1)
+	{
+		CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
+		g_Tag.Reset();
+		ResetTagModifiers();
+		ResetTagPlayers();
+	}
+
+
+	delete kv;
+	return Plugin_Handled;
 }
 
 public Action Listener_BlockCommands(int Client, const char[] command, int argc)
@@ -375,6 +495,12 @@ public Action Command_Tag(int Client, int iArgs)
 		return Plugin_Handled;
 	}
 
+	if(IsClientBanned(Client))
+	{
+		CReplyToCommand(Client, "%s You are banned from playing tag!", CMDTAG);
+		return Plugin_Handled;
+	}
+
 	if(g_Tag.TotalPlayers == null)
 		g_Tag.TotalPlayers = new ArrayList();
 
@@ -480,6 +606,7 @@ public Action Timer_StartTag(Handle timer, int userid)
 		CPrintToTagAll("%s Tag leader has left the game. Tag ended.", CMDTAG);
 
 		g_Tag.Reset();
+		ResetTagModifiers();
 		ResetTagPlayers();
 		return Plugin_Stop;
 	}
@@ -492,6 +619,7 @@ public Action Timer_StartTag(Handle timer, int userid)
 		CPrintToTagAll("%s Tag game is no longer valid, cancelling game...", CMDTAG);
 
 		g_Tag.Reset();
+		ResetTagModifiers();
 		ResetTagPlayers();
 		return Plugin_Stop;
 	}
@@ -501,6 +629,7 @@ public Action Timer_StartTag(Handle timer, int userid)
 		CPrintToChat(Client, "%s No players have joined your game of Tag. Cancelling game...", CMDTAG);
 
 		g_Tag.Reset();
+		ResetTagModifiers();
 		ResetTagPlayers();
 		return Plugin_Stop;
 	}
@@ -534,6 +663,18 @@ void StartGame()
 	// Pick tagger randomly
 	int tagger = clients[GetRandomInt(0, g_Tag.TotalPlayers.Length - 1)];
 	SetEntityMoveType(tagger, MOVETYPE_NONE);
+
+	// Fade tagger
+	BfWrite bf = UserMessageToBfWrite(StartMessageOne("Fade", tagger));
+	bf.WriteShort(1000000000);
+	bf.WriteShort(1000000000);
+	bf.WriteShort(FFADE_PURGE);
+	bf.WriteByte(0);
+	bf.WriteByte(0);
+	bf.WriteByte(0);
+	bf.WriteByte(255);
+	EndMessage();
+
 	SetTagger(tagger);
 
 	CPrintToTagAll("%s %N is {green}IT!{default} All other players have 10 seconds to run before %N is able to chase!", CMDTAG, tagger, tagger);
@@ -562,6 +703,17 @@ public Action Timer_ReleaseTagger(Handle timer, int userid)
 		return Plugin_Stop;
 	}
 
+	// UNFade tagger
+	BfWrite bf = UserMessageToBfWrite(StartMessageOne("Fade", Client));
+	bf.WriteShort(1000000000);
+	bf.WriteShort(1000000000);
+	bf.WriteShort(FFADE_PURGE);
+	bf.WriteByte(0);
+	bf.WriteByte(0);
+	bf.WriteByte(0);
+	bf.WriteByte(0);
+	EndMessage();
+
 	SetEntityMoveType(Client, MOVETYPE_WALK);
 	CPrintToTagAll("%s %N is now able to chase!", CMDTAG, Client);
 	return Plugin_Stop;
@@ -571,18 +723,13 @@ public Action Timer_EndGame(Handle timer)
 {
 	int runnerNum = GetRunnerCount();
 	if(runnerNum >= 1)
-	{
 		CPrintToTagAll("%s Time has run out! Runners win!", CMDTAG);
 
-		for(int i = 1; i <= MaxClients; i++)
-		{
-			if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
-			ForcePlayerSuicide(i);
-		}
-	}
-
-	g_Tag.Reset();
+	g_Tag.Reset(false);
+	ResetTagModifiers();
 	ResetTagPlayers();
+
+	g_Tag.EndTimer = null;
 	return Plugin_Stop;
 }
 
@@ -594,6 +741,8 @@ public Action Timer_BeepRunners(Handle timer)
 		g_TagPlayers[i].Beep = true;
 	}
 	CPrintToTagAll("%s Runners are now beeping!", CMDTAG);
+
+	g_Tag.BeepTimer = null;
 	return Plugin_Stop;
 }
 
@@ -632,14 +781,9 @@ public Action OnTakeDamage(int victim, int& attacker, int& inflictor, float& dam
 		if(runnerNum == 0)
 		{
 			CPrintToTagAll("%s All runners have been caught! Taggers win!", CMDTAG);
-
-			for(int i = 1; i <= MaxClients; i++)
-			{
-				if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
-				ResetTagModifiers();
-			}
-
+	
 			g_Tag.Reset();
+			ResetTagModifiers();
 			ResetTagPlayers();
 		}
 	}
