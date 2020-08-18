@@ -17,7 +17,7 @@ public Plugin myinfo =
 	name = "CoLD Minigames",
 	author = "The Doggy",
 	description = "Hopefully a bunch of fun minigames to mess around with eventually",
-	version = "0.1.3",
+	version = "0.2.0",
 	url = "coldcommunity.com"
 };
 
@@ -396,7 +396,7 @@ void DelaySpawn(int userid)
 		if(g_TagPlayers[Client].Runner)
 		{
 			SetEntProp(Client, Prop_Data, "m_CollisionGroup", 2);
-			SetEntityRenderColor(Client, 255, 0, 183, 255);
+			SetColour(Client, 255, 0, 183, 255);
 		}
 		else if(g_TagPlayers[Client].Tagger)
 			SetTagger(Client);
@@ -434,7 +434,7 @@ public Action GlobalSecondTimer(Handle timer)
 			if(g_TagPlayers[i].Tagger)
 			{
 				// Set tagger colour
-				SetEntityRenderColor(i, 0, 51, 255);
+				SetColour(i, 0, 51, 255);
 
 				// Setup distance vars
 				float pos[3], vec[3];
@@ -464,7 +464,7 @@ public Action GlobalSecondTimer(Handle timer)
 			// Runner beep and colour
 			if(g_TagPlayers[i].Runner)
 			{
-				SetEntityRenderColor(i, 255, 0, 183, 255);
+				SetColour(i, 255, 0, 183, 255);
 				
 				if(g_TagPlayers[i].Beep)
 				{
@@ -655,14 +655,14 @@ void StartGame()
 
 		clients[num++] = i; // For selecting tagger
 		SetEntProp(i, Prop_Data, "m_CollisionGroup", 2);
-		SetEntityRenderColor(i, 255, 0, 183, 255);
+		SetColour(i, 255, 0, 183, 255);
 		g_TagPlayers[i].Runner = true;
 		TeleportEntity(i, pos, NULL_VECTOR, NULL_VECTOR);
 	}
 
 	// Pick tagger randomly
 	int tagger = clients[GetRandomInt(0, g_Tag.TotalPlayers.Length - 1)];
-	SetEntityMoveType(tagger, MOVETYPE_NONE);
+	SetEntProp(tagger, Prop_Data, "m_MoveType", MOVETYPE_NONE);
 
 	// Fade tagger
 	BfWrite bf = UserMessageToBfWrite(StartMessageOne("Fade", tagger));
@@ -714,7 +714,7 @@ public Action Timer_ReleaseTagger(Handle timer, int userid)
 	bf.WriteByte(0);
 	EndMessage();
 
-	SetEntityMoveType(Client, MOVETYPE_WALK);
+	SetEntProp(Client, Prop_Data, "m_MoveType", MOVETYPE_WALK);
 	CPrintToTagAll("%s %N is now able to chase!", CMDTAG, Client);
 	return Plugin_Stop;
 }
@@ -797,7 +797,7 @@ stock void ResetTagModifiers()
 	for(int i = 1; i <= MaxClients; i++)
 	{
 		if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
-		SetEntityRenderColor(i, 255, 255, 255);
+		SetColour(i, 255, 255, 255);
 		SetEntProp(i, Prop_Data, "m_CollisionGroup", 5);
 	}
 }
@@ -807,7 +807,7 @@ stock void SetTagger(int Client)
 	g_TagPlayers[Client].Tagger = true;
 	g_TagPlayers[Client].Runner = false;
 	g_TagPlayers[Client].Beep = false;
-	SetEntityRenderColor(Client, 0, 51, 255);
+	SetColour(Client, 0, 51, 255);
 	if(IsPlayerAlive(Client))
 		GivePlayerItem(Client, "weapon_stunstick");
 	CPrintToChat(Client, "%s You've become a tagger!", CMDTAG);
@@ -827,7 +827,7 @@ stock int GetRandomTagPlayer()
 	int count;
 	do
 	{
-		if(count >= 100) return -1;
+		if(count >= 1000) return -1;
 
 		player = GetRandomInt(1, MaxClients);
 
@@ -895,6 +895,18 @@ stock bool IsClientBanned(int Client)
 	}
 	
 	return true;
+}
+
+stock void SetColour(int Client, int r=255, int g=255, int b=255, int a=255)
+{
+	int offset = GetEntSendPropOffs(Client, "m_clrRender");
+
+	if(offset <= 0) return;
+
+	SetEntData(Client, offset, r, 1, true);
+	SetEntData(Client, offset + 1, g, 1, true);
+	SetEntData(Client, offset + 2, b, 1, true);
+	SetEntData(Client, offset + 3, a, 1, true);
 }
 
 stock void CPrintToTagLeader(const char[] format, any ...)
