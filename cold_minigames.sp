@@ -436,6 +436,10 @@ public Action GlobalSecondTimer(Handle timer)
 				// Set tagger colour
 				SetColour(i, 0, 51, 255);
 
+				// Give stunstick if dont have
+				if(!Client_HasWeapon(i, "weapon_stunstick"))
+					GivePlayerItem(i, "weapon_stunstick");
+
 				// Setup distance vars
 				float pos[3], vec[3];
 
@@ -454,7 +458,7 @@ public Action GlobalSecondTimer(Handle timer)
 				}
 
 				// Sort distances
-				distance.Sort(Sort_Ascending, Sort_Float);
+				SortADTArray(distance, Sort_Ascending, Sort_Float);
 
 				SetHudTextParams(-1.0, 0.6, 1.0, 255, 255, 255, 255);
 				ShowSyncHudText(i, g_HUDDistance, "Distance to closest runner: %i", RoundFloat(distance.Get(0)));
