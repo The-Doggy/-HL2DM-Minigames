@@ -458,7 +458,7 @@ public Action GlobalSecondTimer(Handle timer)
 				}
 
 				// Sort distances
-				SortADTArray(distance, Sort_Ascending, Sort_Float);
+				distance.Sort(Sort_Ascending, Sort_Float);
 
 				SetHudTextParams(-1.0, 0.6, 1.0, 255, 255, 255, 255);
 				ShowSyncHudText(i, g_HUDDistance, "Distance to closest runner: %i", RoundFloat(distance.Get(0)));
