@@ -666,7 +666,7 @@ void StartGame()
 
 	// Pick tagger randomly
 	int tagger = clients[GetRandomInt(0, g_Tag.TotalPlayers.Length - 1)];
-	SetEntProp(tagger, Prop_Data, "m_MoveType", MOVETYPE_NONE);
+	SetEntityMoveType(tagger, MOVETYPE_NONE);
 
 	// Fade tagger
 	BfWrite bf = UserMessageToBfWrite(StartMessageOne("Fade", tagger));
@@ -718,7 +718,7 @@ public Action Timer_ReleaseTagger(Handle timer, int userid)
 	bf.WriteByte(0);
 	EndMessage();
 
-	SetEntProp(Client, Prop_Data, "m_MoveType", MOVETYPE_WALK);
+	SetEntityMoveType(Client, MOVETYPE_WALK);
 	CPrintToTagAll("%s %N is now able to chase!", CMDTAG, Client);
 	return Plugin_Stop;
 }
