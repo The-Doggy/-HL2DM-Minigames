@@ -396,7 +396,7 @@ void DelaySpawn(int userid)
 		if(g_TagPlayers[Client].Runner)
 		{
 			SetEntProp(Client, Prop_Data, "m_CollisionGroup", 2);
-			SetColour(Client, 255, 0, 183, 255);
+			SetEntityRenderColor(Client, 255, 0, 183, 255);
 		}
 		else if(g_TagPlayers[Client].Tagger)
 			SetTagger(Client);
@@ -434,7 +434,7 @@ public Action GlobalSecondTimer(Handle timer)
 			if(g_TagPlayers[i].Tagger)
 			{
 				// Set tagger colour
-				SetColour(i, 0, 51, 255);
+				SetEntityRenderColor(i, 0, 51, 255);
 
 				// Give stunstick if dont have
 				if(!Client_HasWeapon(i, "weapon_stunstick"))
@@ -468,7 +468,7 @@ public Action GlobalSecondTimer(Handle timer)
 			// Runner beep and colour
 			if(g_TagPlayers[i].Runner)
 			{
-				SetColour(i, 255, 0, 183, 255);
+				SetEntityRenderColor(i, 255, 0, 183, 255);
 				
 				if(g_TagPlayers[i].Beep)
 				{
@@ -659,7 +659,7 @@ void StartGame()
 
 		clients[num++] = i; // For selecting tagger
 		SetEntProp(i, Prop_Data, "m_CollisionGroup", 2);
-		SetColour(i, 255, 0, 183, 255);
+		SetEntityRenderColor(i, 255, 0, 183, 255);
 		g_TagPlayers[i].Runner = true;
 		TeleportEntity(i, pos, NULL_VECTOR, NULL_VECTOR);
 	}
@@ -801,7 +801,7 @@ stock void ResetTagModifiers()
 	for(int i = 1; i <= MaxClients; i++)
 	{
 		if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
-		SetColour(i, 255, 255, 255);
+		SetEntityRenderColor(i, 255, 255, 255);
 		SetEntProp(i, Prop_Data, "m_CollisionGroup", 5);
 	}
 }
@@ -811,7 +811,7 @@ stock void SetTagger(int Client)
 	g_TagPlayers[Client].Tagger = true;
 	g_TagPlayers[Client].Runner = false;
 	g_TagPlayers[Client].Beep = false;
-	SetColour(Client, 0, 51, 255);
+	SetEntityRenderColor(Client, 0, 51, 255);
 	if(IsPlayerAlive(Client))
 		GivePlayerItem(Client, "weapon_stunstick");
 	CPrintToChat(Client, "%s You've become a tagger!", CMDTAG);
@@ -901,7 +901,7 @@ stock bool IsClientBanned(int Client)
 	return true;
 }
 
-stock void SetColour(int Client, int r=255, int g=255, int b=255, int a=255)
+stock void SetEntityRenderColor(int Client, int r=255, int g=255, int b=255, int a=255)
 {
 	int offset = GetEntSendPropOffs(Client, "m_clrRender");
 
