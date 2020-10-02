@@ -9,15 +9,15 @@
 #pragma newdecls required
 #pragma semicolon 1
 
-#define CMDTAG			"{dodgerblue}[CoLD Community]{default}"
-#define CONSOLETAG 		"[CoLD Community]"
+#define CMDTAG			"{dodgerblue}[Minigames]{default}"
+#define CONSOLETAG 		"[Minigames]"
 
 public Plugin myinfo = 
 {
-	name = "CoLD Minigames",
+	name = "[HL2:DM] Minigames",
 	author = "The Doggy",
 	description = "Hopefully a bunch of fun minigames to mess around with eventually",
-	version = "0.2.0",
+	version = "0.2.5",
 	url = "coldcommunity.com"
 };
 
