@@ -185,6 +185,48 @@ public void OnClientDisconnect(int Client)
 	}
 }
 
+void RemoveFromTag(int Client)
+{
+	if(g_TagPlayers[Client].Leader && g_Tag.Created && !g_Tag.Started)
+	{
+		CPrintToTagAll("%s %N has left the game, Tag cancelled...", CMDTAG, Client);
+		g_Tag.Reset();
+		ResetTagModifiers();
+		ResetTagPlayers();
+		return;
+	}
+
+	g_TagPlayers[Client].Reset();
+
+	if(g_Tag.TotalPlayers != null)
+	{
+		int index = g_Tag.TotalPlayers.FindValue(Client);
+		if(index != -1)
+		{
+			g_Tag.TotalPlayers.Erase(index);
+
+			if(g_Tag.TotalPlayers.Length <= 1)
+			{
+				CPrintToTagAll("%s Not enough players to continue, cancelling game...", CMDTAG);
+				g_Tag.Reset();
+				ResetTagModifiers();
+				ResetTagPlayers();
+			}
+		}
+	}
+
+	int taggerNum = GetTaggerCount();
+	if(taggerNum == 0 && g_Tag.Started)
+	{
+		CPrintToTagAll("%s All taggers have left the game, picking new tagger...", CMDTAG);
+
+		int tagger = GetRandomTagPlayer();
+
+		SetTagger(tagger);
+		CPrintToTagAll("%s %N is the new tagger!", CMDTAG, tagger);
+	}
+}
+
 public Action Listener_BlockKill(int Client, const char[] command, int argc)
 {
 	if(!IsValidClient(Client)) return Plugin_Continue;
@@ -403,6 +445,13 @@ void DelaySpawn(int userid)
 	}
 }
 
+bool IsCuffed(int Client)
+{
+	char isCuffed[16];
+	GetEntPropString(Client, Prop_Data, "m_iName", isCuffed, sizeof(isCuffed));
+	return StrEqual(isCuffed, "cuffed");
+}
+
 public Action GlobalSecondTimer(Handle timer)
 {
 	// Players Joined HUD Text
@@ -413,6 +462,13 @@ public Action GlobalSecondTimer(Handle timer)
 		for(int i = 1; i <= MaxClients; i++)
 		{
 			if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
+
+			if(IsCuffed(i))
+			{
+				RemoveFromTag(i);
+				continue;
+			}
+
 			ShowSyncHudText(i, g_HUD, "Players Joined: %i", g_Tag.TotalPlayers.Length);
 		}
 	}
@@ -425,10 +481,15 @@ public Action GlobalSecondTimer(Handle timer)
 		{
 			// Main tag HUD
 			if(!IsClientInGame(i) || !g_TagPlayers[i].IsPlaying()) continue;
+
+			if(IsCuffed(i))
 			{
-				SetHudTextParams(-1.0, 0.7, 1.0, 255, 255, 255, 255);
-				ShowSyncHudText(i, g_HUD, "Runners Remaining: %i\nTime Remaining: %i", runnerNum, RoundFloat(g_Tag.TimeRemaining));
+				RemoveFromTag(i);
+				continue;
 			}
+
+			SetHudTextParams(-1.0, 0.7, 1.0, 255, 255, 255, 255);
+			ShowSyncHudText(i, g_HUD, "Runners Remaining: %i\nTime Remaining: %i", runnerNum, RoundFloat(g_Tag.TimeRemaining));
 
 			// Tagger HUD
 			if(g_TagPlayers[i].Tagger)
@@ -899,18 +960,6 @@ stock bool IsClientBanned(int Client)
 	}
 	
 	return true;
-}
-
-stock void SetEntityRenderColor(int Client, int r=255, int g=255, int b=255, int a=255)
-{
-	int offset = GetEntSendPropOffs(Client, "m_clrRender");
-
-	if(offset <= 0) return;
-
-	SetEntData(Client, offset, r, 1, true);
-	SetEntData(Client, offset + 1, g, 1, true);
-	SetEntData(Client, offset + 2, b, 1, true);
-	SetEntData(Client, offset + 3, a, 1, true);
 }
 
 stock void CPrintToTagLeader(const char[] format, any ...)
